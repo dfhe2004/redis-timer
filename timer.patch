@@ -1,0 +1,70 @@
+diff -uNr redis/src/db.c /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//db.c
+--- redis/src/db.c	2011-09-04 19:49:45.000000000 +0800
++++ /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//db.c	2011-09-03 16:18:43.000000000 +0800
+@@ -499,6 +499,19 @@
+     return dbDelete(db,key);
+ }
+ 
++
++void collectExpired(redisDb *db, robj *key) {
++    robj *lobj = lookupKeyWrite(db,shared.expiredpool);
++    if (!lobj) {
++        lobj = createZiplistObject();
++        dbAdd(db,shared.expiredpool,lobj);
++    }
++    listTypePush(lobj,key,REDIS_TAIL);
++    signalModifiedKey(db,shared.expiredpool);
++    server.dirty += 1;
++}
++
++
+ /*-----------------------------------------------------------------------------
+  * Expires Commands
+  *----------------------------------------------------------------------------*/
+diff -uNr redis/src/redis.c /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//redis.c
+--- redis/src/redis.c	2011-09-04 19:49:45.000000000 +0800
++++ /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//redis.c	2011-09-03 16:20:05.000000000 +0800
+@@ -548,7 +548,8 @@
+                     sds key = dictGetEntryKey(de);
+                     robj *keyobj = createStringObject(key,sdslen(key));
+ 
+-                    propagateExpire(db,keyobj);
++                    collectExpired(db,keyobj);
++		    propagateExpire(db,keyobj);
+                     dbDelete(db,keyobj);
+                     decrRefCount(keyobj);
+                     expired++;
+@@ -786,6 +787,7 @@
+     shared.unsubscribebulk = createStringObject("$11\r\nunsubscribe\r\n",18);
+     shared.psubscribebulk = createStringObject("$10\r\npsubscribe\r\n",17);
+     shared.punsubscribebulk = createStringObject("$12\r\npunsubscribe\r\n",19);
++    shared.expiredpool = createStringObject("ExpiredPool",11);
+     shared.mbulk3 = createStringObject("*3\r\n",4);
+     shared.mbulk4 = createStringObject("*4\r\n",4);
+     for (j = 0; j < REDIS_SHARED_INTEGERS; j++) {
+diff -uNr redis/src/redis.h /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//redis.h
+--- redis/src/redis.h	2011-09-04 19:49:45.000000000 +0800
++++ /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//redis.h	2011-09-03 16:21:56.000000000 +0800
+@@ -355,6 +355,7 @@
+     *select5, *select6, *select7, *select8, *select9,
+     *messagebulk, *pmessagebulk, *subscribebulk, *unsubscribebulk, *mbulk3,
+     *mbulk4, *psubscribebulk, *punsubscribebulk,
++    *expiredpool,
+     *integers[REDIS_SHARED_INTEGERS];
+ };
+ 
+@@ -984,6 +985,8 @@
+ /* db.c -- Keyspace access API */
+ int removeExpire(redisDb *db, robj *key);
+ void propagateExpire(redisDb *db, robj *key);
++void collectExpired(redisDb *db, robj *key);
++
+ int expireIfNeeded(redisDb *db, robj *key);
+ time_t getExpire(redisDb *db, robj *key);
+ void setExpire(redisDb *db, robj *key, time_t when);
+diff -uNr redis/src/release.h /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//release.h
+--- redis/src/release.h	1970-01-01 08:00:00.000000000 +0800
++++ /home/dfhe2004/temp/pkg/redis-2.2.7/src/redis/src//release.h	2011-09-03 16:26:35.000000000 +0800
+@@ -0,0 +1,2 @@
++#define REDIS_GIT_SHA1 "b5656701"
++#define REDIS_GIT_DIRTY "98"
